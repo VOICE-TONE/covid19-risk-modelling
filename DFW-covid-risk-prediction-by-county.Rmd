@@ -1,0 +1,607 @@
+---
+title: "COVID positive rate estimation using social media- Tarrant county, Tx, USA"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+
+#### Loading libraries and functions
+
+```{r message=FALSE, warning=FALSE}
+
+setwd("C:/Users/mfondoum/Dropbox/COVID")
+
+source("libraries.R")
+### sourcing function covidcast
+#source("Api.R")
+#source("covid_func.R")
+
+source("loading-and-testing-the-data.R")
+
+```
+
+
+### Getting census data per location (Function sourced from covid-func.R)
+
+```{r}
+
+#### get_census_data (Function sourced from covid-func.R)
+
+#dfw_data <- get_census_data()
+
+```
+
+
+### Getting Tarrant Dataset
+
+```{r}
+
+### Secondary data source gathering (Function sourced from covid-func.R)
+#covid_data_load()
+
+shift_days <- 90
+
+data_60 <- covid_data_60()
+
+tarrant_data_ma <- get_tarrant_df()
+
+#### Splitting into train test
+
+train_index <- index(tarrant_data_ma)[1:round(nrow(tarrant_data_ma)*0.75)]
+
+train_data <- tarrant_data_ma[train_index,]
+
+test_data <- tarrant_data_ma[-train_index,]
+
+nrow(test_data)+nrow(train_data) == nrow(tarrant_data_ma)
+
+```
+
+
+
+#### Building model
+
+```{r}
+
+lm_t1 <- fit_model(df=na.omit(train_data))
+
+summary(lm_t1)
+
+```
+
+
+#### Predicting Tarrant County
+
+```{r}
+
+tarrant_pred_train <- pred_tarrant_model(model = lm_t1, df=na.omit(train_data))
+
+tarrant_pred_test <- predict(lm_t1, na.omit(test_data[,3:6]))
+
+### Combining test data Actual vs Prediction 
+tarrant_test_actual <- test_data[which(rownames(test_data) %in% names(tarrant_pred_test)),c("date", "positivity_rate_7d")] %>% rename(Actual=positivity_rate_7d)
+
+tarrant_pred_test <- tibble(tarrant_test_actual, Fitted=tarrant_pred_test)
+
+### Combining Train and Test Predictions results
+
+tarrant_pred <- bind_rows(na.omit(tarrant_pred_train), tarrant_pred_test)
+
+
+#tarrant_fitted <- c(lm_t1$fitted.values, tarrant_pred_test)
+
+#tarrant_actual <- rbind(train_data, na.omit(test_data))[as.numeric(names(tarrant_fitted)),]
+
+#tarrant_final <- cbind(tarrant_actual, Fitted=tarrant_fitted)
+
+#names(tarrant_final)[7]<- "Actual"
+
+#tarrant_pred <- tarrant_final
+
+test_accuracy <- tarrant_pred %>% dplyr::filter(between(date, as.Date("2020-08-25"), as.Date("2020-09-08"))) %>% dplyr::mutate(Res_sq=(Actual-Fitted)^2, Tot_seq=(Actual-mean(Actual))^2)
+
+
+
+### Calculating the test accuracy based on the diag table (this is good for binary prediction or multinomila prediction)
+
+tab <- table(test_accuracy$Actual, test_accuracy$Fitted)
+
+#tab
+
+1-sum(diag(tab))/sum(tab)
+
+test_accuracy = sum(diag(tab))/sum(tab)
+
+test_accuracy
+
+### Train accuracy (Accuracy on train proves that this accuracy calculationis not suitable for continuous data)
+
+tab1 <- table(na.omit(tarrant_pred_train)$Fitted, na.omit(tarrant_pred_train)$Actual)
+
+train_accuracy = sum(diag(tab1))/sum(tab1)
+
+train_accuracy
+
+
+```
+
+
+#### Plotting Tarrant County Prediction
+
+```{r}
+
+colors <- c("Actual"="steelblue", "Fitted"="#E69F00")
+  
+p <- ggplot(data = tarrant_pred, aes(x=date))+
+    geom_point(aes(y=Actual), color="steelblue")+
+    geom_line(aes(y=Actual), color="steelblue")+
+    geom_point(aes(y=Fitted), color="#E69F00")+
+    geom_line(aes(y=Fitted), color="#E69F00")+
+    scale_x_date(date_breaks = "weeks")+
+    geom_vline(xintercept = as.numeric(tarrant_pred[tarrant_pred$date==as.Date("2020-08-25"),"date"]),color="red", linetype="dashed")+
+    annotate(geom = "segment", x=c(as.Date("2020-09-02"), as.Date("2020-09-02")), xend = c(as.Date("2020-09-04"),as.Date("2020-09-04")), y=c(19, 18), yend = c(19, 18), color=c("steelblue", "#E69F00"), size=1)+
+    annotate(geom = "text", x=c(as.Date("2020-08-13"),as.Date("2020-08-21"), as.Date("2020-09-07"), as.Date("2020-09-07"),as.Date("2020-08-13"),as.Date("2020-08-30")), y=c(19.5, 19.5, 19, 18,16,16), label=c("R-Squared:",round(summary(lm_t1)$r.squared,2), "Actual", "Fitted","Train data", "Test data"), size=4, color="blue")+
+    theme_bw()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), plot.subtitle = element_text(color="blue"), plot.title = element_text(size=12,colour = "black", face = "bold"))+
+    labs(title = "Tarrant County daily risk",subtitle = "(MyPHI Covid Analysis)", x="Date", y="Positivity rates")+
+    scale_color_manual(name="Legend", values = colors)
+
+ggplotly(p)
+
+```
+
+#### Visualizing the data
+
+```{r}
+
+plot(lm_t1)
+
+```
+
+
+```{r}
+
+ggplot(data = tarrant_pred, aes(x=Fitted, y=Actual))+geom_point()+geom_smooth(method = "lm")
+
+summary(lm_t1)
+
+```
+
+
+
+#### DFW counties Risk map
+
+```{r}
+
+#dfw_fips <- c(48085,48113, 48121, 48139, 48221, 48231, 48251, 48257, 48367, 48397, 48425, 48439, 48497)
+
+#dfw_counties <- tibble(county=fips_to_name(dfw_fips))
+
+
+get_county_last_pred <- function(county1){
+
+  test_ma <- get_county_test(county_name = county1)
+
+  test_pred <- pred_county(model = lm_t1, df=test_ma)
+  
+  test_pred <- na.omit(test_pred)
+  
+  as.numeric(test_pred$Fitted[length(test_pred$Fitted)])
+
+}
+
+all_counties_pred <- lapply(dfw_counties$county, function(x) get_county_last_pred(county=x))
+
+all_counties_pred <- Map(get_county_last_pred, dfw_counties$county)
+
+all_counties_pred <-as.data.frame(unlist(all_counties_pred))
+
+names(all_counties_pred)<-c("Risk")
+all_counties_pred$county <- fips_to_name(rownames(all_counties_pred))
+
+all_counties_pred <- full_join(dfw_counties, all_counties_pred, by="county")
+
+all_counties_pred$Risk <- round(all_counties_pred$Risk,2)
+
+all_counties_pred
+
+```
+
+
+### plotting DFW Counties Risk on map
+
+```{r}
+
+library(usmap)
+#dfw_fips <- c(48085,48113, 48121, 48139, 48221, 48231, 48251, 48257, 48367, 48397, 48425, 48439, 48497)
+
+#dfw_counties <- fips_to_name(dfw_fips)
+
+all_counties_pred <- cbind(all_counties_pred,fips=dfw_fips)
+
+#all_counties_pred$fips <- name_to_fips(all_counties_pred$county)
+
+p <- plot_usmap("counties",color = "red", values="Risk", alpha=0.25,include = c(dfw_fips), data = all_counties_pred, labels = TRUE) +
+  scale_fill_continuous(name = "Covid risk rate per county", label = scales::comma, low="white", high="red") + 
+  theme(legend.position = "right", title = element_text(size = 12, colour = "black", face="bold"))+
+  labs(title = "DFW County covid risk prediction. Sep 22/09/2020",
+       caption = "These are the states in the Pacific Timezone.")
+
+ggplotly(p)
+
+```
+
+
+Zipcode level data
+
+```{r}
+library(tigris)
+
+us_states <- states()
+
+us_states_20m <- states(cb = TRUE, resolution = "20m")
+
+tx_20m <- us_states_20m[us_states_20m$NAME=="Texas","STATEFP"]
+
+tx_road <- roads(state = "Texas", county = "Tarrant County")
+
+plot(tx_road)
+
+
+```
+
+```{r}
+
+library(mapproj)
+library(maps)
+
+map("county", state.abb="TX" ,projection = "lambert", 
+    parameters = c(lat0 = 20, lat1 = 50), wrap = TRUE)
+
+```
+
+#### With Leaflet
+```{r}
+
+Tarrant_county <- tibble(
+    address = "5615 Forest Hill Drive, TX 76119",
+    title="Beal, Harlean Elementary Schools",
+    street_address= "5615 Forest Hill Drive, TX 76119"
+  ) %>%
+  tidygeocoder::geocode(address, method = "osm")
+
+library(leaflet)
+
+Tarrant_county_map <- leaflet() %>% 
+  addTiles() %>%
+  addMarkers(data = Tarrant_county) %>%
+  addPopups(
+    data = Tarrant_county, 
+    popup = ~paste0("<b>", title, "</b></br>", street_address)
+  )
+
+Tarrant_county_map
+
+```
+
+
+
+```{r}
+
+nc <- ggplot(data = nc_merged, aes(fill = r_win)) +
+  annotation_map_tile(zoom = 6, type = "osm") + 
+  geom_sf(alpha = 0.5) +
+  scale_fill_manual(values = c("blue", "red")) + 
+  geom_sf_label(aes(label = DISTRICT), fill = "white") + 
+  theme_void()
+nc
+```
+
+
+
+Geospatial analysis with sf
+
+```{r}
+library(sf)
+library(tmap)
+
+zipcode_geo <- st_read("cb_2018_us_zcta510_500k.kml")
+
+plot(zipcode_geo[1])
+
+?sf
+
+```
+
+
+
+US Boundaries Package
+
+```{r}
+
+install.packages("tmap")
+
+
+```
+
+
+
+
+
+
+
+
+### Regression
+
+
+```{r}
+
+tarrant_lm <- lm(data = tarrant_data, Percent_positivity_7d_Avg ~ Google_grocery_7d_Avg+Google_park_7d_Avg+fb_cli_perc_7d_Avg)
+
+summary(tarrant_lm)
+
+plot(tarrant_lm)
+
+covid_model <- saveRDS(tarrant_lm, "covid_model")
+
+```
+
+
+### Getting test data
+
+```{r}
+
+tarrant_test <- covid_get(county_name = "Tarrant", start_date = "2020-09-01", end_date = "2020-09-17")
+
+View(tarrant_data)
+
+tarrant_test_data <- covid_7d_ma(tarrant_test, has_response=TRUE)
+
+
+test_response <- c(10.14,9.57,9.43,9.71,10.0,8.71,9.57,9.29,10.0,9.71) 
+
+tarrant_resp_test <- tibble(Percent_positivity=test_response[1:8])
+
+tarrant_test_data <- cbind(tarrant_test_data, tarrant_resp_test)
+
+
+tarrant_test_data
+
+
+############
+
+
+tarrant_test <- fb_data_tarrant %>% dplyr::select(time_value, value)
+
+#tarrant_test <- covid_7d_ma(tarrant_test)
+
+names(tarrant_test) <- c("date", "cli_perc")
+
+
+google_test <- google_data %>% filter(between(date, as.Date("2020-08-01"), as.Date("2020-09-17"))& state=="Texas" & county=="Tarrant County") %>% dplyr::select(date,grocery.and.pharmacy, parks, state, county)
+
+tarrant_fb_test <- tarrant_test %>% filter(between(date, min(google_test$date), max(google_test$date)))
+
+tarrant_fb_test <- tarrant_fb_test %>% dplyr::select(cli_perc)
+
+
+tarrant_final <- cbind(google_test, tarrant_fb_test)
+
+tarrant_final <- tarrant_final %>% dplyr::select(date, grocery.and.pharmacy, parks, cli_perc)
+
+## Moving Average
+
+tarrant_final_ma <- tarrant_final %>% mutate(Google_park_7d_Avg = round(rollmean(parks,7, fill = NA, align = "right"),1),
+             Google_grocery_7d_Avg = round(rollmean(grocery.and.pharmacy, 7, fill = NA, align = "right"),1),
+             fb_cli_perc_7d_Avg = round(rollmean(cli_perc*100, 7, fill = NA, align = "right"),1))
+             #fb_clic_perc_7d_Avg = round(rollmean(clic_perc, 7, fill = NA, align = "right"),1),
+             #ft_workaway_7d_Avg = round(rollmean(ft_workaway, 7, fill = NA, align = "right"),3),
+             #Percent_positivity_7d_Avg = round(rollmean(Percent_positivity, 7, fill = NA, align = "right"),2))
+
+
+tarrant_final_ma
+
+tarrant_pos <- read.csv("tarrant_county_data.csv")
+
+head(tarrant_pos,20)
+
+```
+
+
+### Predictions
+
+#### Predictions on Tarrant County
+
+```{r}
+
+pred_res <- predict(tarrant_lm, tarrant_test_data)
+
+
+Actual_train <- tarrant_data %>% filter(between(date, as.Date("2020-08-01"), as.Date("2020-08-31"))) %>% select(date,Actual=Percent_positivity_7d_Avg)
+
+predictor_train <- tarrant_data %>% filter(between(date, as.Date("2020-08-01"), as.Date("2020-08-31"))) %>% select(Google_grocery_7d_Avg, Google_park_7d_Avg, fb_cli_perc_7d_Avg)
+
+
+
+pred_train <- predict(tarrant_lm, predictor_train)
+
+pred_out <- tibble(date=tarrant_test_data$date, Fitted=round(pred_res,2), Actual=tarrant_test_data$Percent_positivity)
+
+df_training <- cbind(Actual_train, pred_train)
+
+names(df_training) <- c("date", "Actual", "Fitted")
+
+p <- ggplot()+geom_point(data = df_training, aes(x=date, y=Actual), color="green")+geom_point(data = df_training, aes(x=date, y=Fitted), color="red")
+
+
+ggplotly(p)
+
+head(df_training)
+
+```
+
+Plotting Prediction results
+```{r}
+library(plotly)
+
+pp <- ggplot()
+
+pp1 <- geom_point(data = pred_out, aes(x=date, y=Actual), color='darkblue')
+
+pp2 <- geom_point(data = pred_out, aes(x=date, y=Fitted), color='red')
+
+ggplotly(pp+pp1+pp2)
+
+
+```
+
+
+#### Predictions on another County
+
+
+```{r}
+### Uncomment the line below to load the savce covid_model
+# tarrant_lm <- readRDS("covid_model")
+
+covid_predic(county = "Tarrant", startdate = "2020-05-01", enddate = "2020-09-08")
+
+```
+
+
+
+
+
+
+#### Clustering
+
+K-means
+
+
+```{r}
+
+#kmeans()
+
+```
+
+
+PCA
+
+```{r}
+
+
+#library(splines)
+
+#fit_spline <- lm(Percent_positivity_7d_Avg ~ Google_park_7d_Avg)
+
+```
+
+
+#### Time series
+
+```{r}
+
+library(ggplot2)
+
+library(dplyr)
+
+p <- ggplot()
+p0 <- geom_line(data = data_new,aes(x=Day, y=Percent_positivity_7d_Avg), color='green')
+p00 <- annotate(geom = 'text', x=last(data_new$Day), y=last(data_new$Percent_positivity_7d_Avg), label='Percent_positivity_7d_Avg')
+
+p1 <- geom_line(data = data_new,aes(x=Day, y=Google_park_7d_Avg), color='red')
+p3 <- geom_line(data = data_new,aes(x=Day, y=cli_perc_7d_Avg), color='darkblue')
+
+p2 <- geom_line(data = data_new,aes(x=Day, y=Google_grocery_7d_Avg), color='blue')
+p4 <- geom_line(data = data_new,aes(x=Day, y=clic_perc_7d_Avg))
+p5 <- geom_line(data = data_new,aes(x=Day, y=ft_workaway_7d_Avg))
+
+```
+
+```{r}
+
+p+p0+p1+p2
+
+p+p0+p3+p4+p5
+
+p+p0+p1+p2+p3+p4+p5
+
+p+p0+p00
+
+```
+
+
+
+
+
+```{r}
+p <- ggplot()
+#q0 <- geom_point(data = data_new,aes(x=Day, y=Percent_positivity_7d_Avg), color='green')
+q1 <- geom_point(data = data_new,aes(x=Percent_positivity_7d_Avg, y=Google_park_7d_Avg), color='red')
+q2 <- geom_point(data = data_new,aes(x=Percent_positivity_7d_Avg, y=Google_grocery_7d_Avg), color='blue')
+q3 <- geom_point(data = data_new,aes(x=Percent_positivity_7d_Avg, y=cli_perc_7d_Avg), color='darkblue')
+q4 <- geom_point(data = data_new,aes(x=Percent_positivity_7d_Avg, y=clic_perc_7d_Avg))
+q5 <- geom_point(data = data_new,aes(x=Percent_positivity_7d_Avg, y=ft_workaway_7d_Avg))
+
+```
+
+
+```{r}
+
+prediction <- tibble(Day=test_df$Day, Fitted=pred_res)
+
+df_all <- rbind(df,prediction)
+
+actual <- tibble(Actual=c(data_new$Percent_positivity_7d_Avg, test_response))
+
+df_final <- tibble(df_all, actual)
+
+df_final
+
+```
+
+Appended data
+```{r}
+
+df1 <- data_new[,c('Google_park_7d_Avg', 'Google_grocery_7d_Avg', 'cli_perc_7d_Avg')]
+
+df2 <- tibble(ght_data_test[,-1],fb_data_val_test)
+
+names(df1) <- c("Park", "Grocery", "cli_perc")
+
+df2 <- df2 %>% dplyr::select(Park,Grocery,cli_perc)
+
+df3 <- add_row(df1, df2)
+
+View(df3)
+
+```
+
+
+
+Plotting fitted versus actual
+
+```{r}
+
+qq <- ggplot()
+
+qq1 <- geom_point(data = df_final, aes(x=Day, y=Actual), color='darkblue')
+
+qq2 <- geom_point(data = df_final, aes(x=Day, y=Fitted), color='red')
+
+qq+qq1+qq2+geom_vline(xintercept = as.numeric(df_final$Day[63]))+labs(title = "MyPHI COVID Model Accuracy: Predicted (Red) vs Actual (Blue)")+theme_bw()+theme(title = element_text(colour = "blue"))+annotate(geom = 'text', x=df_final$Day[c(31,67,31)], y=c(18,18,20), label=c("Training", "Test", "R_Sqr = 0.9063"))
+
+```
+
+
+#### R-squared of test dataset
+
+```{r}
+
+combined_test <- tibble(Percent_positivity_7d_Avg=test_response, test_df)
+
+summary(lm(data = combined_test, Percent_positivity_7d_Avg ~ Google_grocery_7d_Avg+Google_park_7d_Avg+cli_perc_7d_Avg))
+
+```
+
+

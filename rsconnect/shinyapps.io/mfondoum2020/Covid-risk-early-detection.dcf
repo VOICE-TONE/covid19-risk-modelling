@@ -1,0 +1,12 @@
+name: Covid-risk-early-detection
+title: Covid-risk-early-detection
+username:
+account: mfondoum2020
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2897626
+bundleId: 3676561
+url: https://mfondoum2020.shinyapps.io/Covid-risk-early-detection/
+when: 1601234806.15729
+asMultiple: FALSE
+asStatic: FALSE
