@@ -14,7 +14,7 @@ require(shinydashboard)
 require(flexdashboard)
 require(leaflet)
 require(widgetframe)
-require(choroplethrZip)
+#require(choroplethrZip)
 require(covidcast)
 require(tigris)
 require(usmap)
@@ -31,10 +31,10 @@ require(foreign)
 ### Link for the package ChoroplethrZip
 ### https://rdrr.io/github/arilamstein/choroplethrZip/man/zip_choropleth.html
 
-suppressPackageStartupMessages(library(sp))
-suppressPackageStartupMessages(library(sf))
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(ggiraph))
+suppressPackageStartupMessages(require(sp))
+suppressPackageStartupMessages(require(sf))
+suppressPackageStartupMessages(require(ggplot2))
+suppressPackageStartupMessages(require(ggiraph))
 
 ### Saving data.census.gov API key in the environment
 Sys.setenv(CENSUS_KEY="423e5eab1ff90e9683995aaab8ff20c826296484")
