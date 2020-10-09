@@ -70,12 +70,16 @@ pl_cnt_cnx <- function(county_fips){
 }
 
 
+dfw_cnt_shp <- dfw_cnt_shp %>% arrange(GEOID)
+
+fb_sci_dfw <- fb_sci_dfw %>% arrange(user_loc,fr_loc)
 
 q1<- ggplot() +
   theme_bw()+
   geom_sf(data=dfw_cnt_shp, aes(fill = fb_sci_dfw[fb_sci_dfw$user_loc==county_fips,"rel_cnx"]), color="white")+
   scale_fill_gradient(low = "#56B1F7", high = "#132B43")+
-  geom_sf_text(data = dfw_cnt_shp, aes(label = NAME), colour = "white")
+  geom_sf_text(data = dfw_cnt_shp, aes(label = NAME), colour = "white")+
+  labs(title = paste(fips_to_name(county_fips), "Facebook Social Connectedness"))
 
 
 ggplotly(q1)  

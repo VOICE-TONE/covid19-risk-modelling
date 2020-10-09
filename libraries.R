@@ -27,6 +27,8 @@ require(tidygeocoder)
 require(webshot)
 require(gpclib)
 require(foreign)
+require(zoo)
+require(tidyr)
 
 ### Link for the package ChoroplethrZip
 ### https://rdrr.io/github/arilamstein/choroplethrZip/man/zip_choropleth.html

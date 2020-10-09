@@ -1,104 +1,65 @@
-##### Combining all datasets 
 
-start <- ymd("2020-06-24")
-
-end <- today()-3
-
-county= "Tarrant County"
-
-### Facebook combined
-fb_cli_df <- fb_cli %>% 
-  arrange(geo_value, time_value) %>% 
-  filter(dplyr::between(time_value, as.Date(start), as.Date(end))) %>% 
-  mutate(fips=geo_value, date=time_value, cli=value) %>%
-  dplyr::select(fips, date, cli)
+###### Load tf_fb.R file here for Facebook ######
 
 
-fb_cmnt_cli_df <- fb_cmnty_cli %>% 
-  arrange(geo_value, time_value) %>% 
-  filter(dplyr::between(time_value, as.Date(start), as.Date(end))) %>% 
-  mutate(fips=geo_value, date=time_value, cmnt_cli=value) %>%
-  dplyr::select(fips, date, cmnt_cli)
+###### Load tf_sg.R file here for Safegraph ######
 
 
-fb_df <- full_join(fb_cli_df, fb_cmnt_cli_df, by=c("fips","date"))
-
-# fb Tarrant
-
-fb_df_tarrant <- fb_df %>% filter(fips == name_to_fips(county))
-
-### Safegraph combined
-
-sg_ft_df <- sg_mob_ft %>% 
-  arrange(geo_value, time_value) %>% 
-  filter(dplyr::between(time_value, as.Date(start), as.Date(end))) %>% 
-  mutate(fips=geo_value, date=time_value, fulltime=value) %>%
-  dplyr::select(fips, date, fulltime)
+###### Load tf_apl.R file here for Apple #######
 
 
-sg_pt_df <- sg_mob_pt %>% 
-  arrange(geo_value, time_value) %>% 
-  filter(dplyr::between(time_value, as.Date(start), as.Date(end))) %>% 
-  mutate(fips=geo_value, date=time_value, parttime=value) %>%
-  dplyr::select(fips, date, parttime)
+
+##### Loading Tarrant County data for the purpose of model building
+
+load_county <- function(){
+  
+  ### Positivity rates Tarrant County
+  
+  pos_tarrant <- read.csv("data/tarrant_county_data.csv", header = T)
+  
+  pos_tarrant$Day <- dmy(pos_tarrant$Day)
+  
+  pos_tarrant <- pos_tarrant %>% 
+    arrange(Day) %>%
+    dplyr::filter(dplyr::between(Day, as.Date(start)-6, as.Date(end))) %>% 
+    dplyr::select(date=Day,pos=Percent_positivity) %>%
+    dplyr::arrange(date, county)
+  
+  ### Calculating 7days moving average
+  pos_tarrant$pos_ma <- rollmean(pos_tarrant$pos, 7, align = "right", na.pad = TRUE)
+  
+  pos_tarrant <- na.omit(pos_tarrant)
+  
+  pos_tarrant$pos_ma <- pos_tarrant$pos_ma
+  
+  return(pos_tarrant)
+  
+}
 
 
-sg_df <- full_join(sg_ft_df, sg_pt_df, by=c("fips","date"))
-
-#Tarrant County
-
-sg_df_tarrant <- sg_df %>% filter(fips == as.numeric(name_to_fips("Tarrant County")))
-
-# 7 Days moving average Safegraphe data
-sg_df_tarrant$fulltime <- rollmean(sg_df_tarrant$fulltime, 7, align = "right", na.pad = TRUE)
-sg_df_tarrant$parttime <- rollmean(sg_df_tarrant$parttime, 7, align = "right", na.pad = TRUE)
-
-
-### Apple mobility combined
-
-apple_mob_tarrant <- apple_mob_tarrant1 %>% 
-  dplyr::arrange(date) %>%
-  dplyr::filter(dplyr::between(date, as.Date(start), as.Date(end)))
-
-
-### Positivity rates Tarrant County
-
-pos_tarrant <- read.csv("data/tarrant_county_data.csv", header = T)
-
-pos_tarrant$Day <- dmy(pos_tarrant$Day)
-
-pos_tarrant <- pos_tarrant %>% 
-  arrange(Day) %>%
-  dplyr::filter(dplyr::between(Day, as.Date(start)-6, as.Date(end))) %>% 
-  dplyr::select(date=Day,pos=Percent_positivity) %>%
-  dplyr::arrange(date, county, )
-
-### Calculating 7days moving average
-pos_tarrant$pos_ma <- rollmean(pos_tarrant$pos, 7, align = "right", na.pad = TRUE)
-
-pos_tarrant <- na.omit(pos_tarrant)
-
-pos_tarrant$pos_ma <- pos_tarrant$pos_ma/100
+### Loading County positivity rate
+pos_tarrant <- load_county()
 
 ### final dataset
 
-df1 <- left_join(pos_tarrant[,-2], fb_df_tarrant[,-1])
-df2 <- left_join(df1,sg_df_tarrant[,-1])
-df_final <- left_join(df2, apple_mob_tarrant[,-c(2,13)])
+comb_final <- function(df=pos_tarrant){
+  
+  df1 <- left_join(pos_tarrant[,-2], fb_df_tarrant[,-1])
+  df2 <- left_join(df1,sg_df_tarrant[,-1])
+  df_final <- left_join(df2, apple_mob_tarrant[,-c(2,13)])
+  
+  df_final$comp_indice <- df_final$transit/(df_final$transit+df_final$driving)
+  
+  df_final <- na.omit(df_final)
+  
+  
+  df_final <- na.omit(df_final[,c("date","pos_ma","cli","cmnt_cli","fulltime","parttime","comp_indice")])
+  
+  return(df_final)
+}
 
-df_final$comp_indice <- df_final$transit/(df_final$transit+df_final$driving)
-
-df_final <- na.omit(df_final)
-
-
-df_final <- na.omit(df_final[,c("date","pos_ma","cli","cmnt_cli","fulltime","parttime","comp_indice")])
-
-
-
-
-#### Test Dataset
-
-
+### building Final dataset
+df_final <- comb_final(df=pos_tarrant)
 
 
 
