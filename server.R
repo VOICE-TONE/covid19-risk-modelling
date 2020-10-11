@@ -10,13 +10,13 @@
 require(shiny)
 
 ##### Loadong all VECM models used for forecasting
-load("VAR_pos_R.rda")
+load("models/VAR_pos_R.rda")
 
-load("VAR_pos_R_seas.rda")
+load("models/VAR_pos_R_seas.rda")
 
-load("VAR_pos_Rs.rda")
+load("models/VAR_pos_Rs.rda")
 
-load("VAR_pos_Rs_seas.rda")
+load("models/VAR_pos_Rs_seas.rda")
 
 
 ##### Setting the number of days to predict to 14
