@@ -3,46 +3,11 @@
 ### Apple mobility data
 
 
-trans_apl <- function(df=apple_mob_dfw){
-
-  
-  #### Creating variables driving, walking and transit
-  
-  apple_driving <- df %>% 
-    filter(tolower(transportation_type)=="driving") %>% 
-    dplyr::select(date, county=region, type=transportation_type, driving =value)
-  
-  apple_walking <- df %>% 
-    filter(tolower(transportation_type)=="walking") %>% 
-    dplyr::select(date, county=region, type=transportation_type, walking =value)
-  
-  apple_transit <- df %>% 
-    filter(tolower(transportation_type)=="transit") %>% 
-    dplyr::select(date, county=region, type=transportation_type, transit =value)
-  
-  
-  drive_walk <- full_join(apple_driving, apple_walking, by=c("date", "county"))
-  
-  apple_mob_new <- full_join(drive_walk, apple_transit, by=c("date", "county"))
-  
-  apple_mob_new <- apple_mob_new %>% dplyr::select(date, county, driving, walking, transit)
-  
-  # Removing temp dataframe created
-  rm(drive_walk)
-  
-  
-  return(apple_mob_new)
-  
-}
 
 ### Running apple Transformation function
 apple_mob_new <- trans_apl(df=apple_mob_dfw)
 
-
-
-
-
-########## Function to filter county specific data
+########## Filtering Apple data to county specific and transforming 
 
 apl_county <- function(cnt="tarrant county", df=apple_mob_new, start=start, end=end){
   
@@ -53,7 +18,7 @@ apl_county <- function(cnt="tarrant county", df=apple_mob_new, start=start, end=
   
   ### Computing 7 days moving average
   
-
+  
   # Filling NA values with previous value
   apple_mob_tarrant <- apple_mob_tarrant %>% fill(driving)
   apple_mob_tarrant <- apple_mob_tarrant %>% fill(walking)
@@ -74,7 +39,7 @@ apl_county <- function(cnt="tarrant county", df=apple_mob_new, start=start, end=
   
   
   apple_mob_tarrant1 <- apple_mob_tarrant %>% mutate(safe_mob_indice = (rel_driving+rel_walking)/(rel_transit+rel_walking+rel_driving))
- 
+  
   ###### Apple mobility combined ######
   
   apple_mob_tarrant <- apple_mob_tarrant1 %>% 
@@ -85,9 +50,6 @@ apl_county <- function(cnt="tarrant county", df=apple_mob_new, start=start, end=
   return(apple_mob_tarrant) 
   
 }
-
-
-
 
 
 ############### Below lines are part of the main app after county is selected #########

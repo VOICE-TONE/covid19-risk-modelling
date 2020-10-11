@@ -1,0 +1,476 @@
+---
+title: "The COVID-19 Symptom Data Challenge - Phase I Application"
+output: 
+  html_notebook:
+      code_folding: hide
+      css: "style.css"
+---
+
+<p><br><br>
+
+### Supporting schools reopening decision making in Dallas Fort Worth using Facebook symptoms public data
+
+<div>
+<br>
+<font align="justify">We sought to develop a prediction model that accurately predicts COVID-19 community transmission in a timely manner, to support school-reopening decision making and school-based COVID-19 surveillance strategy. Our model leverages county-level Facebook Symptom Tracker data along with Apple mobility data to predict daily rates of COVID-19 community transmission to guide decision making for safe school reopening, timely closure, or school-based surveillance testing. By using our model, School and Public Health might implement interventions to mitigate the risk for school-based COVID-19 transmission, enhance students’ educational experience, and limit disruptive school closures.</font></div>
+
+```{r echo=FALSE}
+
+source("libraries.R")
+
+```
+
+</p>
+
+<div>
+
+<div>
+<p><br><br>
+
+
+
+```{r echo=TRUE}
+
+# Loading sequentially R codes
+source("load-data-ts.R")
+source("tf_apl.R")
+source("tf_fb_sci.R")
+source("tf_sg.R")
+
+```
+
+#### Variables selection 
+<p><br>
+Loading data from Facebook Symptoms datasets and other public datasets for analysis:
+
+1. Facebook survey data
+
+  * Facebook Covid Like Illness (smoothed and weighted) as "cli"
+  * Facebook Community Covid Like Illness (smoothed and weighted) as "cmnt_cli"
+
+2. Safegraph mobility data
+
+  * Average time spent at full-time work location
+  * Average time spent at hall-time work location  
+
+3. Apple mobility data
+
+This data contains device change in mobility using Jan 13th, 2020 as reference to track changes.
+
+  * Walking
+  * Transit
+  * Driving
+
+
+### Data exploration 
+
+#### Facebook Data {.tabset}
+
+##### Facebook Plot
+
+```{r warning=FALSE, message=FALSE, out.width="80%"}
+
+fb_df_tarrant %>%
+  melt(id.vars = c("date"), measure.vars = c("cli", "cmnt_cli")) %>% 
+  group_by(variable) %>%
+  group_map(~plot_ly(.,x=~date, y=~value,color = ~variable, mode = "lines"), keep=TRUE) %>%
+  subplot(nrows = 1, shareX = TRUE, shareY = FALSE) %>%
+  layout(title="Facebook CLI vs Community CLI")
+  
+
+```
+
+##### Facebook data
+
+```{r warning=FALSE, message=FALSE}
+
+head(fb_df_tarrant)
+
+```
+  
+
+
+#### Safegraph Data {.tabset}
+
+
+##### Safegraph Plot
+
+```{r warning=FALSE, message=FALSE,out.width="80%"}
+
+sg_df_tarrant %>%
+  plot_ly(x=~date) %>%
+  add_trace(y=~fulltime, mode="lines", name="Fulltime") %>%
+  add_trace(y=~parttime, mode="lines", name="Parttime")
+  
+
+```
+##### Safegraph data
+
+```{r warning=FALSE, message=FALSE}
+
+head(sg_df_tarrant)
+
+```
+  
+
+
+
+#### Apple Data {.tabset}
+
+
+##### Apple Plot
+
+```{r warning=FALSE, message=FALSE, out.width="80%"}
+
+apple_mob_tarrant[,1:5] %>%
+  plot_ly(x=~date) %>% 
+  add_trace(y=~driving, mode="lines", name="driving") %>%
+  add_trace(y=~walking, mode="lines", name="walking") %>%
+  add_trace(y=~transit, mode="lines", name="transit") %>%
+  layout(title="Apple mobility data")
+
+```
+##### Mobility data
+
+```{r warning=FALSE, message=FALSE}
+
+head(apple_mob_tarrant[,1:5])
+
+```
+
+
+</div>
+
+
+<div>
+
+#### Features engineering
+
+From apple data, we create a composite indicator by combining the effect of driving and transit variables into a single variable which the transit ratio to transit + driving. $transit/(transit+driving)$. This variable is calculated based on the assumption that the higher the transit, the higher the risk of infection and the higher the driving, the lower the risk of infection, hence driving is at the denominator of the formula and transit as well is there to normalize the value between 0 and 1.
+
+```{r warning=FALSE, message=FALSE}
+
+plot_ly(data = df_final, x=~date) %>% 
+  add_trace(y=~comp_indice, mode="lines") %>%
+  layout(title="Apple Mobility Composite indicator", yaxis=list(title="Mobility index"))
+
+```
+
+</div>
+
+
+<div>
+### Combined dataset {.tabset}
+
+#### Data
+
+```{r}
+
+df_final
+
+```
+
+</div>
+
+<div>
+
+```{r}
+
+##############################################################
+#                   NEW PHASE                                #
+############## Vector Error correction Model #################
+require(bvartools)
+require(urca)
+require(vars)
+require(dynlm)
+require(forecast)
+
+k <- nrow(df_final)-14
+
+
+##############################################################
+####  Making the dataset stationary by first differencing ####
+
+df_full_ts <- ts(df_final[,-1])
+
+df_full_ts_sta <- diff(df_full_ts,1)
+
+
+##############################################################
+############## Creating the training and test timeseries ##################
+df_final_ts <- df_full_ts[1:k,]
+  
+df_test <- df_full_ts[(k+1):nrow(df_full_ts),]
+
+df_test_ts <- ts(df_test[,-c(1:2)])
+
+### Stationarizing the test dataset
+df_test_ts_sta <- diff(df_test_ts,1)
+
+```
+
+#### Original timeseries
+
+```{r}
+
+df_1 <- df_final[1:k,-1]
+
+names(df_1) <- c("Positivity", "CLI", "Community_CLI", "Fulltime", "Partime", "Apple_comp_index")
+
+plot(ts(df_1), main="Figure 1: Time series plot non-stationary")
+
+
+```
+
+
+#### Stationary timeseries
+This is the representation of the time series after applying the first difference with the first lag value
+
+
+```{r}
+
+df_2 <- df_final[1:k,-1]
+
+names(df_2) <- c("Positivity", "CLI", "Community_CLI", "Fulltime", "Partime", "Apple_comp_index")
+
+df_2 <- na.omit(diff(ts(df_2), 1))
+
+plot(df_2, main="Figure 1: Time series plot non-stationary")
+
+```
+</div>
+
+### Building the VAR Models {.tabset}
+
+#### VAR Model summary
+
+```{r}
+
+source("functions.R")
+
+##############################################################
+################## VAR MODEL BUILDING ########################
+
+#Lag selection
+var_lag <- VARselect(df_final_ts, lag.max = 8, type = "both", season = 7)
+
+# Extracting the lag seleciton by AIC
+max_lag = as.numeric(var_lag$selection[1])
+
+## Option 1: VAR Model
+VAR_pos <- VAR(df_final_ts, lag.max = max_lag, type = "both", season = 7)
+
+summary(VAR_pos$varresult$pos_ma)
+
+
+```
+
+#### Coefficient testing
+
+```{r}
+
+coeftest(VAR_pos$varresult$pos_ma)
+
+```
+
+
+### Building the VECM Models {.tabset}
+
+#### VECM Model summary
+
+The model shows 5 point of cointegration by the values of r based on the Johanssen Cointegration testing procedure
+
+```{r}
+
+##############################################################
+################## VECM MODEL BUILDING #######################
+
+k_order <- VAR_pos$p
+
+vecm_model1 <- ca.jo(df_final_ts, ecdet = "none", type = "trace", K=k_order, spec = "transitory")
+
+vecm_model2 <- ca.jo(df_final_ts, ecdet = "none", type = "trace", K=k_order, spec = "transitory", season = 7)
+
+summary(vecm_model2)
+
+```
+
+### Forecasting with VECM model
+
+#### Using first Cointegration point vs existing data
+
+```{r}
+
+require(vars)
+
+### Converting back VECM to new VAR model
+
+VAR_pos_R <- lapply(c(1:5), function(x) vec2var(vecm_model1, r=x))
+
+VAR_pos_R_seas <- lapply(c(1:5), function(x) vec2var(vecm_model2, r=x))
+
+#VAR_pos_R1 <- vec2var(vecm_model1, r=1)
+#VAR_pos_R2 <- vec2var(vecm_model1, r=2)
+#VAR_pos_R3 <- vec2var(vecm_model1, r=3)
+#VAR_pos_R4 <- vec2var(vecm_model1, r=4)
+#VAR_pos_R5 <- vec2var(vecm_model1, r=5)
+
+
+###########################################
+#                                         #
+### Prediction using the VECM_TO_VAR_R1 ###
+
+### Prediction with test dataset
+
+ndays <- 14
+
+VAR_pos_R_pred <- lapply(VAR_pos_R, function(x) predict(x, new_data=df_test_ts, ahead=ndays))
+
+### Prediction with Seasonality
+VAR_pos_R_seas_pred <- lapply(VAR_pos_R_seas, function(x) predict(x, new_data=df_test_ts, ahead=ndays))
+
+
+### Plotting predictions
+
+plt_R <- lapply(VAR_pos_R, function(x) var_pred(model = x, df=df_test_ts, ahead=ndays))
+
+plt_R_seas <- lapply(VAR_pos_R_seas, function(x) var_pred(model = x, df=df_test_ts, ahead=ndays))
+
+
+#var_pred(model = VAR_pos_R2,  df=df_test_ts, ahead=14)
+
+#var_pred(model = VAR_pos_R3,  df=df_test_ts, ahead=14)
+
+#var_pred(model = VAR_pos_R4,  df=df_test_ts, ahead=14)
+
+#var_pred(model = VAR_pos_R5,  df=df_test_ts, ahead=14)
+
+### Forecasting auto-regressively
+
+#var_forecast(model = VAR_pos_R1, ahead=14, actual_df=df_final)
+var_forecast(model = VAR_pos_R1, ahead=60, actual_df=df_final)
+var_forecast(model = VAR_pos_R2, ahead=30, actual_df=df_final)
+var_forecast(model = VAR_pos_R3, ahead=30, actual_df=df_final)
+var_forecast(model = VAR_pos_R4, ahead=30, actual_df=df_final)
+var_forecast(model = VAR_pos_R5, ahead=30, actual_df=df_final)
+
+save(VAR_pos_R, file = "VAR_pos_R.rda")
+save(VAR_pos_R_seas, file = "VAR_pos_R_seas.rda")
+#save(VAR_pos_R_pred, file = "VAR_pos_R_pred.rda")
+#save(VAR_pos_R_seas_pred, file = "VAR_pos_R_seas_pred.rda")
+#save(plt_R, file = "plt_R.rda")
+#save(plt_R_seas, file = "plt_R_seas.rda")
+
+
+
+################### The End #####################
+
+```
+
+<div>
+##### Prediction accuracy
+
+```{r}
+
+require("ie2misc")
+mape_R <- lapply(VAR_pos_R, function(x) mape(VAR_pos_R_pred[[1]]$fcst$pos_ma[,"fcst"], df_test[1:10,"pos_ma"] ))
+
+mape_R
+
+```
+
+</div>
+
+
+<p><p>
+
+
+## USING THE Full dataset FOR FORECASTING FUTURE DATES WITHOUT AVAILABLE PREDICTORS DATA ##
+
+```{r}
+
+##### Test with full data
+
+#Lag selection
+var_lag1 <- VARselect(df_full_ts, lag.max = 8, type = "both", season = 7)
+
+# Extracting the lag seleciton by AIC
+max_lag1 = as.numeric(var_lag1$selection[1])
+
+## Option 1: VAR Model
+VAR_pos1 <- VAR(df_full_ts, lag.max = max_lag, type = "both", season = 7)
+
+summary(VAR_pos1$varresult$pos_ma)
+
+
+```
+```{r}
+
+k_order1 <- VAR_pos1$p
+
+vecm_model11 <- ca.jo(df_full_ts, ecdet = "none", type = "trace", K=k_order, spec = "transitory")
+
+vecm_model21 <- ca.jo(df_full_ts, ecdet = "none", type = "trace", K=k_order, spec = "transitory", season = 7)
+
+summary(vecm_model21)
+
+```
+
+
+```{r}
+
+VAR_pos_Rs <- lapply(c(1:5), function(x) vec2var(vecm_model11, r=x))
+save(VAR_pos_Rs, file="VAR_pos_Rs.rda")
+
+VAR_pos_Rs_seas <- lapply(c(1:5), function(x) vec2var(vecm_model21, r=x))
+save(VAR_pos_Rs_seas, file="VAR_pos_Rs_seas.rda")
+
+
+VAR_pos_Rs_pred <- lapply(VAR_pos_Rs, function(x) predict(x,  ahead=14))
+
+### Prediction with Seasonality
+VAR_pos_R_seas_pred <- lapply(VAR_pos_Rs_seas, function(x) predict(x, new_data=df_full_ts, ahead=ndays))
+
+
+### Plotting predictions
+
+plt_Rs <- lapply(VAR_pos_Rs, function(x) var_forecast(model = x, ahead=14))
+
+plt_Rs_seas <- lapply(VAR_pos_Rs_seas, function(x) var_pred(model = x, df=df_full_ts, ahead=nrow(df_full_ts)))
+
+
+plot(VAR_pos_Rs_pred[[5]]$fcst$pos_ma[,"fcst"], type="l")
+
+VAR_forecast <- predict(VAR_pos_Rs[[2]], n.ahead=14)
+
+plot(VAR_forecast)
+
+```
+
+
+```{r}
+
+### Creating the vector of days ahead corresponding to the forecast
+days_ahead <- last(df_final$date)+days(0:ndays)[-1]
+fcst_ahead <- VAR_forecast$fcst$pos_ma[,"fcst"]
+
+### only the data part of the forecast ndays ahead
+df_fcst_only <- tibble(date=days_ahead, 
+                       value=VAR_forecast$fcst$pos_ma[,"fcst"], 
+                       lower=VAR_forecast$fcst$pos_ma[,"lower"],
+                       upper=VAR_forecast$fcst$pos_ma[,"upper"])
+
+### Binding the dates of the actual to the days ahead and the Actual values to the prediction ahead
+df_fcst <- tibble(date=c(df_final$date, days_ahead), value=c(df_final$pos_ma,VAR_forecast$fcst$pos_ma[,"fcst"]))
+
+plot_ly() %>%
+  add_lines(data = df_fcst, x=~date, y=~value, name="Positivity rate") %>%
+  add_ribbons(data = df_fcst_only, 
+              x=~date,
+              ymin = ~lower,
+              ymax = ~upper,
+              color=I("orange"),
+              name = "95% confidence")
+
+```
+

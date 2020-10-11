@@ -11,56 +11,39 @@
 
 ##### Loading Tarrant County data for the purpose of model building
 
-load_county <- function(){
-  
-  ### Positivity rates Tarrant County
-  
-  pos_tarrant <- read.csv("data/tarrant_county_data.csv", header = T)
-  
-  pos_tarrant$Day <- dmy(pos_tarrant$Day)
-  
-  pos_tarrant <- pos_tarrant %>% 
-    arrange(Day) %>%
-    dplyr::filter(dplyr::between(Day, as.Date(start)-6, as.Date(end))) %>% 
-    dplyr::select(date=Day,pos=Percent_positivity) %>%
-    dplyr::arrange(date, county)
-  
-  ### Calculating 7days moving average
-  pos_tarrant$pos_ma <- rollmean(pos_tarrant$pos, 7, align = "right", na.pad = TRUE)
-  
-  pos_tarrant <- na.omit(pos_tarrant)
-  
-  pos_tarrant$pos_ma <- pos_tarrant$pos_ma
-  
-  return(pos_tarrant)
-  
-}
+
+
+##### If the function load_county() is not found, load the functions.R file
 
 
 ### Loading County positivity rate
 pos_tarrant <- load_county()
 
-### final dataset
-
-comb_final <- function(df=pos_tarrant){
-  
-  df1 <- left_join(pos_tarrant[,-2], fb_df_tarrant[,-1])
-  df2 <- left_join(df1,sg_df_tarrant[,-1])
-  df_final <- left_join(df2, apple_mob_tarrant[,-c(2,13)])
-  
-  df_final$comp_indice <- df_final$transit/(df_final$transit+df_final$driving)
-  
-  df_final <- na.omit(df_final)
-  
-  
-  df_final <- na.omit(df_final[,c("date","pos_ma","cli","cmnt_cli","fulltime","parttime","comp_indice")])
-  
-  return(df_final)
-}
 
 ### building Final dataset
 df_final <- comb_final(df=pos_tarrant)
 
+
+
+#### Preparing time series data for analysis
+k <- nrow(df_final)-14
+
+
+##############################################################
+####  Making the dataset stationary by first differencing ####
+
+df_final_ts <- ts(df_final[1:k,-1])
+df_final_ts_sta <- diff(df_final_ts,1)
+
+
+##############################################################
+############## Creating the test timeseries ##################
+df_test <- na.omit(df_final[(k+1):nrow(df_final),])
+
+df_test_ts <- ts(df_test[,-c(1:2)])
+
+### Stationarizing the test dataset
+df_test_ts_sta <- diff(df_test_ts,1)
 
 
 

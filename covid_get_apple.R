@@ -1,6 +1,6 @@
 ### Getting Apple data
 
-apple_mob <- read.csv("../../covid19/apple/applemobilitytrends-2020-10-02.csv", header = TRUE, sep = ",")
+apple_mob <- read.csv("data/applemobilitytrends-2020-10-02.csv", header = TRUE, sep = ",")
 
 apple_mob_dfw <- apple_mob %>% dplyr::filter(region %in% dfw_counties$county & sub.region=="Texas")
 

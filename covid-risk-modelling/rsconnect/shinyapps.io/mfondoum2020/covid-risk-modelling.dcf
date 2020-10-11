@@ -1,0 +1,12 @@
+name: covid-risk-modelling
+title: covid-risk-modelling
+username:
+account: mfondoum2020
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2987995
+bundleId: 3725568
+url: https://mfondoum2020.shinyapps.io/covid-risk-modelling/
+when: 1602398407.77142
+asMultiple: FALSE
+asStatic: FALSE

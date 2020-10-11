@@ -1,29 +1,5 @@
 ### Data Transformation main file
 
-### Safegraph combined
-
-sg_combined <- function(df1=sg_mob_ft, df2=sg_mob_pt, start=start, end=end){
-
-  ## This function combines safegraph fulltime and parttime data
-  sg_ft_df <- df1 %>% 
-    dplyr::arrange(geo_value, time_value) %>% 
-    dplyr::filter(dplyr::between(time_value, as.Date(start), as.Date(end))) %>% 
-    dplyr::mutate(fips=geo_value, date=time_value, fulltime=value) %>%
-    dplyr::select(fips, date, fulltime)
-  
-  
-  sg_pt_df <- df2 %>% 
-    arrange(geo_value, time_value) %>% 
-    filter(dplyr::between(time_value, as.Date(start), as.Date(end))) %>% 
-    mutate(fips=geo_value, date=time_value, parttime=value) %>%
-    dplyr::select(fips, date, parttime)
-  
-  
-  sg_df <- full_join(sg_ft_df, sg_pt_df, by=c("fips","date"))
-  
-  return(sg_df)
-  
-}
 
 ## Running Safegraph dataframe combination function
 sg_df <- sg_combined(df1=sg_mob_ft, df2=sg_mob_pt, start=start, end=end)
