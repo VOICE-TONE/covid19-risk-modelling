@@ -1,9 +1,11 @@
 ---
 title: "The COVID-19 Symptom Data Challenge - Phase I Application"
-output: 
+output:
+  html_document:
+    df_print: paged
   html_notebook:
-      code_folding: hide
-      css: "style.css"
+    code_folding: hide
+    css: style.css
 ---
 
 <p><br><br>
@@ -13,12 +15,6 @@ output:
 <div>
 <br>
 <font align="justify">We sought to develop a prediction model that accurately predicts COVID-19 community transmission in a timely manner, to support school-reopening decision making and school-based COVID-19 surveillance strategy. Our model leverages county-level Facebook Symptom Tracker data along with Apple mobility data to predict daily rates of COVID-19 community transmission to guide decision making for safe school reopening, timely closure, or school-based surveillance testing. By using our model, School and Public Health might implement interventions to mitigate the risk for school-based COVID-19 transmission, enhance students’ educational experience, and limit disruptive school closures.</font></div>
-
-```{r echo=FALSE}
-
-source("libraries.R")
-
-```
 
 </p>
 
@@ -31,11 +27,22 @@ source("libraries.R")
 
 ```{r echo=TRUE}
 
+## Loading parameters
+source("libraries.R")
+source("params.R")
+source("functions.R")
+
+## Getting historical data
+source("covid_get_fb.R")
+source("covid_get_sg.R")
+source("covid_get_apple.R")
+
 # Loading sequentially R codes
 source("load-data-ts.R")
 source("tf_apl.R")
 source("tf_fb_sci.R")
 source("tf_sg.R")
+
 
 ```
 
@@ -84,7 +91,7 @@ fb_df_tarrant %>%
 
 ```{r warning=FALSE, message=FALSE}
 
-head(fb_df_tarrant)
+tail(fb_df_tarrant)
 
 ```
   
@@ -97,18 +104,46 @@ head(fb_df_tarrant)
 
 ```{r warning=FALSE, message=FALSE,out.width="80%"}
 
+sg_test_ft_ts <- ts(sg_df_tarrant$fulltime, frequency = 7)
+
+sg_test_pt_ts <- ts(sg_df_tarrant$parttime, frequency = 7)
+
+### Autoarima to select the best forecast based on AIC
+fit_pt <- auto.arima(sg_test_pt_ts)
+
+fit_ft <- auto.arima(sg_test_ft_ts)
+
+### Forecast length by taking the difference between last day provided by safegraph and today 
+len <- as.numeric(today() - last(sg_df_tarrant$date))
+
+## Forecasting 
+sg_pt_arima <- forecast(fit_pt, h=len)
+
+sg_ft_arima <- forecast(fit_ft, h=len)
+
+sg_pt_est <- sg_pt_arima$mean[1:len]
+
+sg_ft_est <- sg_ft_arima$mean[1:len]
+
+new_dates <- seq.Date(from=last(sg_df_tarrant$date)+1, to=today(), by="day")
+
+sg_fcst <- tibble(fips=tail(sg_df_tarrant$fips,len), date=new_dates, fulltime=sg_ft_est, parttime=sg_pt_est)
+
+sg_df_tarrant <- bind_rows(sg_df_tarrant, sg_fcst)
+
+
 sg_df_tarrant %>%
   plot_ly(x=~date) %>%
   add_trace(y=~fulltime, mode="lines", name="Fulltime") %>%
   add_trace(y=~parttime, mode="lines", name="Parttime")
-  
+
 
 ```
 ##### Safegraph data
 
 ```{r warning=FALSE, message=FALSE}
 
-head(sg_df_tarrant)
+tail(sg_df_tarrant)
 
 ```
   
@@ -134,7 +169,7 @@ apple_mob_tarrant[,1:5] %>%
 
 ```{r warning=FALSE, message=FALSE}
 
-head(apple_mob_tarrant[,1:5])
+tail(apple_mob_tarrant[,1:5])
 
 ```
 
@@ -143,6 +178,16 @@ head(apple_mob_tarrant[,1:5])
 
 
 <div>
+
+
+# Compiling the final dataset
+
+```{r}
+
+source("final_data.R")
+
+```
+
 
 #### Features engineering
 
@@ -168,6 +213,10 @@ plot_ly(data = df_final, x=~date) %>%
 
 df_final
 
+save(df_final, file = "data/df_final.rda")
+
+load("data/df_final.rda")
+
 ```
 
 </div>
@@ -185,7 +234,9 @@ require(vars)
 require(dynlm)
 require(forecast)
 
-k <- nrow(df_final)-14
+ndays1 <- 14
+
+k <- nrow(df_final)-ndays1
 
 
 ##############################################################
@@ -206,6 +257,10 @@ df_test_ts <- ts(df_test[,-c(1:2)])
 
 ### Stationarizing the test dataset
 df_test_ts_sta <- diff(df_test_ts,1)
+
+save(df_test, file="data/df_test.rda")
+
+save(df_test_ts, file="data/df_test_ts.rda")
 
 ```
 
@@ -322,12 +377,12 @@ VAR_pos_R_seas <- lapply(c(1:5), function(x) vec2var(vecm_model2, r=x))
 
 ### Prediction with test dataset
 
-ndays <- 14
+ndays <- ndays1
 
-VAR_pos_R_pred <- lapply(VAR_pos_R, function(x) predict(x, new_data=df_test_ts, ahead=ndays))
+VAR_pos_R_pred <- lapply(VAR_pos_R, function(x) predict(x, new_data=df_test_ts, n.ahead=ndays))
 
 ### Prediction with Seasonality
-VAR_pos_R_seas_pred <- lapply(VAR_pos_R_seas, function(x) predict(x, new_data=df_test_ts, ahead=ndays))
+VAR_pos_R_seas_pred <- lapply(VAR_pos_R_seas, function(x) predict(x, new_data=df_test_ts, n.ahead=ndays))
 
 
 ### Plotting predictions
@@ -348,11 +403,13 @@ plt_R_seas <- lapply(VAR_pos_R_seas, function(x) var_pred(model = x, df=df_test_
 ### Forecasting auto-regressively
 
 #var_forecast(model = VAR_pos_R1, ahead=14, actual_df=df_final)
-var_forecast(model = VAR_pos_R1, ahead=60, actual_df=df_final)
-var_forecast(model = VAR_pos_R2, ahead=30, actual_df=df_final)
-var_forecast(model = VAR_pos_R3, ahead=30, actual_df=df_final)
-var_forecast(model = VAR_pos_R4, ahead=30, actual_df=df_final)
-var_forecast(model = VAR_pos_R5, ahead=30, actual_df=df_final)
+
+## Uncomment
+#var_forecast(model = VAR_pos_R[[1]], ahead=14, actual_df=df_final)
+#var_forecast(model = VAR_pos_R[[2]], ahead=14, actual_df=df_final)
+#var_forecast(model = VAR_pos_R[[3]], ahead=14, actual_df=df_final)
+#var_forecast(model = VAR_pos_R[[4]], ahead=14, actual_df=df_final)
+#var_forecast(model = VAR_pos_R[[5]], ahead=14, actual_df=df_final)
 
 save(VAR_pos_R, file = "VAR_pos_R.rda")
 save(VAR_pos_R_seas, file = "VAR_pos_R_seas.rda")
@@ -361,25 +418,11 @@ save(VAR_pos_R_seas, file = "VAR_pos_R_seas.rda")
 #save(plt_R, file = "plt_R.rda")
 #save(plt_R_seas, file = "plt_R_seas.rda")
 
-
+plt_R_seas
 
 ################### The End #####################
 
 ```
-
-<div>
-##### Prediction accuracy
-
-```{r}
-
-require("ie2misc")
-mape_R <- lapply(VAR_pos_R, function(x) mape(VAR_pos_R_pred[[1]]$fcst$pos_ma[,"fcst"], df_test[1:10,"pos_ma"] ))
-
-mape_R
-
-```
-
-</div>
 
 
 <p><p>
@@ -414,6 +457,9 @@ vecm_model21 <- ca.jo(df_full_ts, ecdet = "none", type = "trace", K=k_order, spe
 
 summary(vecm_model21)
 
+
+#vecm_final <- cajolst(vecm_model11)
+
 ```
 
 
@@ -426,27 +472,76 @@ VAR_pos_Rs_seas <- lapply(c(1:5), function(x) vec2var(vecm_model21, r=x))
 save(VAR_pos_Rs_seas, file="VAR_pos_Rs_seas.rda")
 
 
-VAR_pos_Rs_pred <- lapply(VAR_pos_Rs, function(x) predict(x,  ahead=14))
+VAR_pos_Rs_pred <- lapply(VAR_pos_Rs, function(x) predict(x,  n.ahead=ndays))
 
 ### Prediction with Seasonality
-VAR_pos_R_seas_pred <- lapply(VAR_pos_Rs_seas, function(x) predict(x, new_data=df_full_ts, ahead=ndays))
+VAR_pos_Rs_seas_pred <- lapply(VAR_pos_Rs_seas, function(x) predict(x, new_data=df_full_ts, n.ahead=ndays))
 
 
 ### Plotting predictions
 
-plt_Rs <- lapply(VAR_pos_Rs, function(x) var_forecast(model = x, ahead=14))
+plt_Rs <- lapply(VAR_pos_Rs, function(x) var_forecast(model = x, ahead=ndays))
 
-plt_Rs_seas <- lapply(VAR_pos_Rs_seas, function(x) var_pred(model = x, df=df_full_ts, ahead=nrow(df_full_ts)))
+plt_Rs_seas <- lapply(VAR_pos_Rs_seas, function(x) var_pred(model = x, ahead=ndays))
 
 
-plot(VAR_pos_Rs_pred[[5]]$fcst$pos_ma[,"fcst"], type="l")
+plt_Rs
 
-VAR_forecast <- predict(VAR_pos_Rs[[2]], n.ahead=14)
+```
+### VECM model selection based on MAPE
 
+
+```{r}
+
+require("ie2misc")
+
+mape_RS <- lapply(1:length(VAR_pos_Rs), function(x) mape(VAR_pos_Rs_pred[[x]]$fcst$pos_ma[,"fcst"], df_test[1:ndays,"pos_ma"]))
+
+
+mape_Seas_RS <- lapply(1:length(VAR_pos_Rs_seas), function(x) mape(VAR_pos_Rs_seas_pred[[x]]$fcst$pos_ma[,"fcst"], df_test[1:ndays,"pos_ma"]))
+
+## Extracting the position of the lowest 
+a <- which(unlist(mape_RS)==min(unlist(mape_RS)))
+
+## Extracting the position of the lowest 
+b <- which(unlist(mape_Seas_RS)==min(unlist(mape_Seas_RS)))
+
+
+
+### Moving the old model to the old folder before saving the new model
+
+if(file.exists("models/final_model.rda")){
+    
+  file.rename("models/final_model.rda", paste0("models/",today(),"_final_model.rda"))
+}
+
+
+
+## Selecting the minimal MAPE from seasonal and non-seasonal
+if(a < b){
+  
+  VAR_forecast <- predict(VAR_pos_Rs[[a]], n.ahead=ndays)
+  print("The selected model is Without seasonality")
+  final_model <-VAR_pos_Rs[[a]]
+  
+}else{
+  VAR_forecast <- predict(VAR_pos_Rs_seas[[b]], n.ahead=ndays)
+  print("The selected model is with seasonality")
+  final_model <- VAR_pos_Rs_seas[[b]]
+}
+
+### Saving the model
+
+save(final_model, file = "models/final_model.rda")
+
+
+### Plotting Forecast
 plot(VAR_forecast)
 
 ```
 
+
+### Plotting entire dataset based on model selection
 
 ```{r}
 
@@ -464,13 +559,110 @@ df_fcst_only <- tibble(date=days_ahead,
 df_fcst <- tibble(date=c(df_final$date, days_ahead), value=c(df_final$pos_ma,VAR_forecast$fcst$pos_ma[,"fcst"]))
 
 plot_ly() %>%
-  add_lines(data = df_fcst, x=~date, y=~value, name="Positivity rate") %>%
+  add_lines(data = tail(df_fcst,60), x=~date, y=~value, name="Positivity rate") %>%
   add_ribbons(data = df_fcst_only, 
               x=~date,
               ymin = ~lower,
               ymax = ~upper,
               color=I("orange"),
               name = "95% confidence")
+
+```
+
+### Predicting Zipcode level data using ADI-Cases Coefficients
+##### ADI_Cases rate will be used to estimate positivity rate using a 2SLS (2 Stages least square regression)
+##### First stage being the regression between ADI and Case rates in Harris
+##### Second being regression between ADI and positivity rate in Tarrant
+##### Tarrant county zipcode with median ADI is assigned the lowest 
+
+```{r}
+## Uncomment before running if var
+load("data/harris_lm.rda")
+load("data/tarrant_data.rda")
+adi_case_coef <- as.numeric(harris_lm$coefficients[1])
+
+```
+
+
+#### Computing positivity rate zipcode level
+
+```{r}
+
+### Selecting reference zipcode
+ref_zip <- tarrant_data[round(tarrant_data$adi_st_mean,1)==round(median(tarrant_data$adi_st_mean),1),"zipcode"]
+
+ref_adi <- tarrant_data$adi_st_mean[tarrant_data$zipcode==ref_zip]
+
+### Calculating the adi difference from the reference and the Additive change in positivity rate based on 
+### Calculated adi-case_rate coefficient
+tarrant_data <- tarrant_data %>% dplyr::mutate(adi_diff=adi_st_mean-ref_adi, change=adi_diff*adi_case_coef)
+
+
+### Creating a matrix of zipcodes
+tarrant_data_zip <- spread(tarrant_data, zipcode, change) %>% dplyr::select(-c(1:6))
+
+### Expanding dataframe with NA values for merging purpose
+tarrant_data_zip[nrow(tarrant_data)+nrow(df_fcst)-nrow(tarrant_data),] <- NA
+
+### Adding the county positivity rate in front
+
+tarrant_data_zip <- cbind(df_fcst, tarrant_data_zip)
+
+### Assigning default to reference zip
+
+#tarrant_data_zip[,ref_zip] <- tarrant_data_zip$value
+
+### Assigning Tarrant County positivity rate including predicted to the reference zipcode
+
+tarrant_zip_est <- lapply(names(tarrant_data_zip)[-c(1:2)], function(x) tarrant_data_zip$value+mean(tarrant_data_zip[,x], na.rm=T))
+
+### Binding columns of the dataframe
+tarrant_zip_est <- bind_cols(tarrant_zip_est)
+
+### Reassigning zipcode names to the list
+
+names(tarrant_zip_est)<- paste0("Z", names(tarrant_data_zip[-c(1:2)]))
+
+View(tarrant_zip_est)
+tarrant_zip_est <- bind_cols(df_fcst, tarrant_zip_est)
+tarrant_zip_est <- tarrant_zip_est %>% mutate_if(is.numeric, round, digits=2)
+save(tarrant_zip_est, file = "data/tarrant_zip_est.rda")
+
+
+```
+
+
+
+
+
+```{r}
+
+plot_ly(data=tarrant_zip_est, x=~date) %>% 
+  add_trace(y=~Z76105, mode="markers+lines", name="76105") %>% 
+  add_trace(y=~Z76106, mode="markers+lines", name="76106") %>%
+  add_trace(y=~Z76164, mode="markers+lines", name="76164")
+
+```
+
+
+## Forecast
+
+
+### VAR Forecast with newdata
+
+```{r}
+
+library(tsDyn)
+
+vecm1 <- VECM(df_final_ts, lag = 8)
+
+vecm1 %>% summary()
+
+VARrep(vecm1)
+
+vecm1_pred <- predict_rolling(vecm1, newdata = df_test ,nroll = 7)
+
+plot(vecm1_pred$true$pos_ma, vecm1_pred$pred$pos_ma, type="p")
 
 ```
 
