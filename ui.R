@@ -6,7 +6,14 @@
 #
 #    http://shiny.rstudio.com/
 #
+
 source("libraries.R")
+source("params.R")
+
+#source("covid_get_apple.R")
+#source("covid_get_fb.R")
+#source("covid_get_sg.R")
+
 source("functions.R")
 source("load-data-ts.R")
 source("tf_apl.R")
@@ -39,8 +46,8 @@ shinyUI(fluidPage(
             
             selectInput(inputId = "county", 
                         label = "Select a County", 
-                        choices = unique(dfw_counties$county)[12],
-                        selected = unique(dfw_counties$county)[12])
+                        choices = unique(dfw_counties$county)[1],
+                        selected = unique(dfw_counties$county)[1])
         ),
 
         # Show a plot of the generated distribution
@@ -58,7 +65,7 @@ shinyUI(fluidPage(
                          br(),
                          br(),
                          
-                         plotlyOutput("prediction")
+                         plotlyOutput("forecasting2")
                          
                 ),
                 

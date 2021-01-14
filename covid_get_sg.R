@@ -1,8 +1,9 @@
-library(lubridate)
-library(covidcast)
 
-start <- "2020-04-04"
-end <- today()
+#########################################################################################
+### Required Libraries.R and Params.R to be loaded first to get the value of state      #
+#########################################################################################
+### Uncomment the below line if ran within loading params.R
+#source("params.R")
 
 
 ### Safegraph
@@ -15,8 +16,9 @@ sg_mob_ft <- suppressMessages(
                                 geo_values = dfw_fips)
               )
 
-saveRDS(sg_mob_ft, "sg_mob_ft.rds")
+#saveRDS(sg_mob_ft, "sg_mob_ft.rds")
 
+saveRDS(sg_mob_ft, paste0(path, "_sg_mob_ft.rds"))
 
 #### Partime
 sg_mob_pt <- suppressMessages(
@@ -26,4 +28,6 @@ sg_mob_pt <- suppressMessages(
                                 geo_values = dfw_fips)
               )
 
-saveRDS(sg_mob_pt, "sg_mob_pt.rds")
+#saveRDS(sg_mob_pt, "sg_mob_pt.rds")
+
+saveRDS(sg_mob_pt, paste0(path, "_sg_mob_pt.rds"))

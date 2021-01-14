@@ -1,6 +1,8 @@
-start <- "2020-04-04"
-end <- today()
-
+#########################################################################################
+### Required Libraries.R and Params.R to be loaded first to get the value of state      #
+#########################################################################################
+### Uncomment the below line if ran within loading params.R
+#source("params.R")
 
 ### Getting Dallas Fort Worth Data
 
@@ -15,7 +17,9 @@ fb_cli <- suppressMessages(
                    geo_values = dfw_fips)
 )
 
-saveRDS(fb_cli, "data/fb_cli.rds")
+#saveRDS(fb_cli, "data/fb_cli.rds")
+
+saveRDS(fb_cli, paste0(path, "_fb_cli.rds"))
 
 
 ##################################################
@@ -28,21 +32,33 @@ fb_cmnty_cli <- suppressMessages(
                    geo_values = dfw_fips)
 )
 
-saveRDS(fb_cmnty_cli, "data/fb_cmnty_cli.rds")
+#saveRDS(fb_cmnty_cli, "data/fb_cmnty_cli.rds")
 
+saveRDS(fb_cmnty_cli, paste0(path,"_fb_cmnty_cli.rds"))
 
 
 ##################################################
 #                                                #
 ##### Fb social connectedness index ##############
 
-fb_sci <- read.table("../../covid19/social-connectedness-index/county_county_aug2020.tsv", sep = "\t", header = T)
+## path_sci is defined in the Params.R file
 
-fb_sci_dfw <- fb_sci %>% filter(user_loc %in% dfw_fips & fr_loc %in% dfw_fips)
+#### uncomment all the below to work with social connectedness
 
-saveRDS(fb_sci_dfw, "data/fb_sci_dfw.rds")
 
-### Data Exploration
+# fb_sci <- read.table(path_sci, sep = "\t", header = T)
+
+# fb_sci_dfw <- fb_sci %>% filter(user_loc %in% dfw_fips & fr_loc %in% dfw_fips)
+
+# saveRDS(fb_sci_dfw, paste0(path,"_fb_sci_dfw.rds"))
+
+
+#### Uncommenting ends here
+
+
+
+##################################################
+### Data Exploration - Not part of model building#
 
 # head(fb_sci_dfw)
 

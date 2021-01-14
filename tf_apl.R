@@ -9,12 +9,12 @@ apple_mob_new <- trans_apl(df=apple_mob_dfw)
 
 ########## Filtering Apple data to county specific and transforming 
 
-apl_county <- function(cnt="tarrant county", df=apple_mob_new, start=start, end=end){
+apl_county <- function(cnt, df=apple_mob_new, start=start, end=end){
   
   
   #### Filtering apple data for Tarrant county only
   
-  apple_mob_tarrant <- df %>% filter(tolower(county) == cnt)
+  apple_mob_tarrant <- df %>% filter(tolower(county) == tolower(cnt))
   
   ### Computing 7 days moving average
   
@@ -54,7 +54,7 @@ apl_county <- function(cnt="tarrant county", df=apple_mob_new, start=start, end=
 
 ############### Below lines are part of the main app after county is selected #########
 ### Running to county filtering function for apple
-apple_mob_tarrant <- apl_county(cnt="tarrant county", df=apple_mob_new, start=start, end=end)
+apple_mob_tarrant <- apl_county(cnt=county, df=apple_mob_new, start=start, end=end)
 
 ### Some exploration
 # Plotting timeseries of walking, driving and transit

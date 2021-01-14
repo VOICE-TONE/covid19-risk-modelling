@@ -9,8 +9,8 @@
 load_county <- function(){
   
   ### Positivity rates Tarrant County
-  
-  pos_tarrant <- read.csv("data/tarrant_county_data.csv", header = T)
+  ### path_county is defined in the Params.R file
+  pos_tarrant <- read.csv(path_county, header = T)
   
   pos_tarrant$Day <- dmy(pos_tarrant$Day)
   
