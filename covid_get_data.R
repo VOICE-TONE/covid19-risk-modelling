@@ -11,7 +11,9 @@ fb_cli <- suppressMessages(
                                 geo_values = dfw_fips)
           )
 
-saveRDS(fb_cli, "fb_cli.rds")
+#saveRDS(fb_cli, "fb_cli.rds")
+
+saveRDS(fb_cli, "fb_cli0.rds")
 
 
 
@@ -22,7 +24,9 @@ fb_cmnty_cli <- suppressMessages(
                            geo_values = dfw_fips)
           )
 
-saveRDS(fb_cmnty_cli, "fb_cmnty_cli.rds")
+#saveRDS(fb_cmnty_cli, "fb_cmnty_cli.rds")
+
+saveRDS(fb_cmnty_cli, "fb_cmnty_cli0.rds")
 
 
 ### Safegraph
